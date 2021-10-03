@@ -1,0 +1,100 @@
+CREATE EXTERNAL TABLE MsBrand(
+  BrandID INT,
+  BrandName VARCHAR(255)
+)
+ROW FORMAT DELIMITED 
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+TBLPROPERTIES("skip.header.line.count"="1")
+
+CREATE EXTERNAL TABLE MsProduct(
+  ProductID INT,
+  ProductName VARCHAR(255),
+  BrandId INT,
+  Price INT
+)
+ROW FORMAT DELIMITED 
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+TBLPROPERTIES("skip.header.line.count"="1")
+
+select* from msproduct
+
+LOAD DATA INPATH '/user/cloudera/MsBrand.csv' INTO TABLE MsBrand;
+LOAD DATA INPATH '/user/cloudera/MsProduct.csv' INTO TABLE MsProduct;
+
+SELECT* FROM msproduct
+
+SELECT brandname,SUM(dt.quantity*mp.price) AS Profit,year(ht.transactiondate)
+FROM msbrand mb JOIN 
+MsProduct mp ON mp.brandid = mb.brandid
+JOIN detailtransaction dt ON dt.productid = mp.productid
+JOIN headertransaction ht ON ht.transactionid=dt.transactionid
+WHERE year(ht.transactiondate)=2020
+GROUP BY mb.brandname,year(ht.transactiondate)
+ORDER BY Profit DESC
+LIMIT 15 ;
+
+--b b.	Show 3 most demanded HappyDay products.
+SELECT mp.productname,mb.brandname, sum(dt.quantity) AS Demanded 
+FROM msbrand mb JOIN
+msproduct mp ON mp.brandid = mb.brandid
+JOIN detailtransaction dt ON dt.productid=mp.productid
+where mb.brandname="HappyDay"
+GROUP BY mp.productname, mb.brandname
+ORDER BY Demanded DESC
+LIMIT 3 ;
+
+--c.c.	Show 10 female customers who have made the most number of transactions.
+SELECT mc.customername, count(ht.transactionid) AS NumberOfTransaction
+FROM mscustomer mc 
+JOIN headertransaction ht ON ht.customerid = mc.customerid 
+WHERE mc.customergender="Female"
+GROUP BY mc.customername
+ORDER BY NumberOfTransaction DESC
+LIMIT 10;
+
+--d d.	Show all online transaction that spend more money than the average of other online transaction.
+    SELECT ht.transactionid, ht.transactiontype,
+    sum(dt.quantity*mp.price) as spend
+    FROM headertransaction ht JOIN
+    detailtransaction dt ON ht.transactionid = dt.transactionid JOIN
+    msproduct mp ON mp.productid = dt.productid,
+    (
+    SELECT avg(x1.spend) as avg_sold
+FROM(
+    SELECT ht.transactionid, ht.transactiontype,
+    sum(dt.quantity*mp.price) as spend
+    FROM headertransaction ht JOIN
+    detailtransaction dt ON ht.transactionid = dt.transactionid JOIN
+    msproduct mp ON mp.productid = dt.productid
+    WHERE ht.transactiontype="Online"
+    GROUP BY ht.transactionid, ht.transactiontype
+)as x1
+    )as x2
+    WHERE ht.transactiontype="Online"
+    GROUP BY ht.transactionid, ht.transactiontype,x2.avg_sold
+    HAVING spend>x2.avg_sold
+    
+;
+
+--e
+SELECT mc.customername, sum(dt.quantity*mp.price) AS TotalSpent, year(ht.transactiondate) as YearTrans,
+CASE 
+    WHEN SUM(dt.quantity*mp.price) BETWEEN 500000 AND 749999 THEN "5% transaction discount"
+    WHEN SUM(dt.quantity*mp.price) BETWEEN 750000 AND 999999 THEN "15% transaction discount"
+    WHEN SUM(dt.quantity*mp.price) >= 1000000 THEN "20% transaction discount"
+    END AS VOUCHER
+FROM mscustomer mc JOIN
+headertransaction ht ON ht.customerid=mc.customerid
+JOIN detailtransaction dt ON dt.transactionid=ht.transactionid
+JOIN msproduct mp ON mp.productid=dt.productid
+WHERE year(ht.transactiondate)=2020
+GROUP BY mc.customername, year(ht.transactiondate)
+HAVING TotalSpent>500000
+ORDER BY TotalSpent DESC
+
+
+
+
+
